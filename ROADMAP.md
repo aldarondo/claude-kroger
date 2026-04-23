@@ -14,3 +14,6 @@
 - [2026-04-19] Scaffold: package.json, src/auth.js, src/api.js, src/index.js, src/authorize.js, .env.example, .gitignore, CLAUDE.md
 - [2026-04-19] SSE transport pattern: src/server.js (factory), src/index.js (stdio), src/serve.js (SSE on port 8771), docker-compose.yml, unit tests (8 passing)
 - [2026-04-19] Deployed to Synology NAS (port 8771); container running — blocked on Kroger credentials in `.env`
+
+## 🚫 Blocked
+- ❌ [docker-monitor:container-stopped] Container `claude-kroger` is not running on the NAS — check `docker logs claude-kroger` and restart — 2026-04-23 05:08 UTC
