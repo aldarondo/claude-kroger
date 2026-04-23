@@ -1,12 +1,8 @@
 services:
   claude-kroger:
-    image: node:20-alpine
+    image: ghcr.io/aldarondo/claude-kroger:latest
     container_name: claude-kroger
     restart: unless-stopped
-    working_dir: /app
-    volumes:
-      - .:/app
-      - /app/node_modules
     environment:
       - KROGER_CLIENT_ID=${KROGER_CLIENT_ID}
       - KROGER_CLIENT_SECRET=${KROGER_CLIENT_SECRET}
@@ -14,5 +10,9 @@ services:
       - KROGER_USER_REFRESH_TOKEN=${KROGER_USER_REFRESH_TOKEN:-}
       - KROGER_USER_TOKEN_EXPIRES_AT=${KROGER_USER_TOKEN_EXPIRES_AT:-0}
       - PORT=${PORT:-8771}
-    command: node src/serve.js
     network_mode: host
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"

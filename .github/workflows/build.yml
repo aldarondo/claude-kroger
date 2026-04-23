@@ -1,0 +1,57 @@
+name: Build claude-kroger image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - src/**
+      - package*.json
+  schedule:
+    - cron: "0 8 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/claude-kroger:latest
+            ghcr.io/${{ github.repository_owner }}/claude-kroger:${{ github.sha }}
+
+      - name: Install cloudflared and sshpass
+        run: |
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o /tmp/cloudflared.deb
+          sudo dpkg -i /tmp/cloudflared.deb && sudo apt-get install -y sshpass
+
+      - name: Deploy to NAS
+        env:
+          NAS_PASS: ${{ secrets.NAS_SSH_PASSWORD }}
+          SSHPASS: ${{ secrets.NAS_SSH_PASSWORD }}
+          CF_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          sshpass -e ssh -o StrictHostKeyChecking=no \
+            -o "ProxyCommand=cloudflared access ssh --hostname nas-ssh.aldarondo.family --id $CF_CLIENT_ID --secret $CF_CLIENT_SECRET" \
+            charles@nas-ssh.aldarondo.family \
+            "echo \"$NAS_PASS\" | sudo -S /usr/local/bin/docker compose -f /volume1/docker/claude-kroger/docker-compose.yml pull \
+             && echo \"$NAS_PASS\" | sudo -S /usr/local/bin/docker compose -f /volume1/docker/claude-kroger/docker-compose.yml up -d"
