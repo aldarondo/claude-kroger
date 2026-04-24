@@ -18,7 +18,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { getClientToken, getUserToken } from './auth.js';
-import { searchProducts, searchLocations, addToCart, nearestLocationId } from './api.js';
+import { searchProducts, searchLocations, addToCart, nearestLocationId, getProductDetails } from './api.js';
 
 // Load .env if present (dev convenience)
 try {
@@ -67,8 +67,37 @@ export function createServer() {
               type: 'number',
               description: 'Number of results to return (default: 10, max: 50)',
             },
+            brand: {
+              type: 'string',
+              description: 'Optional. Filter by brand name (e.g. "Kroger", "Tide").',
+            },
+            fulfillment: {
+              type: 'string',
+              description: 'Optional. Filter by fulfillment type: "PICKUP" or "DELIVERY".',
+              enum: ['PICKUP', 'DELIVERY'],
+            },
           },
           required: ['query'],
+        },
+      },
+      {
+        name: 'get_product_details',
+        description:
+          'Fetch full details for a single product by UPC, including nutrition facts, size, stock level, ' +
+          'and categories. Optionally provide a zip_code for local pricing.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            upc: {
+              type: 'string',
+              description: '13-digit UPC code of the product (from search_products results)',
+            },
+            zip_code: {
+              type: 'string',
+              description: 'Optional. US ZIP code for local pricing and availability.',
+            },
+          },
+          required: ['upc'],
         },
       },
       {
@@ -139,7 +168,7 @@ export function createServer() {
             locationId = await nearestLocationId(token, args.zip_code);
           }
 
-          const products = await searchProducts(token, args.query, locationId, limit);
+          const products = await searchProducts(token, args.query, locationId, limit, args.brand, args.fulfillment);
 
           if (products.length === 0) {
             return { content: [{ type: 'text', text: `No products found for "${args.query}".` }] };
@@ -155,6 +184,34 @@ export function createServer() {
             : `Found ${products.length} product(s) for "${args.query}" (no store selected — prices may vary):`;
 
           return { content: [{ type: 'text', text: `${header}\n\n${lines.join('\n\n')}` }] };
+        }
+
+        case 'get_product_details': {
+          const token = await getClientToken();
+          let locationId = null;
+          if (args.zip_code) {
+            locationId = await nearestLocationId(token, args.zip_code);
+          }
+
+          const product = await getProductDetails(token, args.upc, locationId);
+
+          const lines = [
+            `${product.brand ? product.brand + ' — ' : ''}${product.description}`,
+            `UPC: ${product.upc}`,
+            `Price: ${product.price}`,
+          ];
+          if (product.size)                lines.push(`Size: ${product.size}`);
+          if (product.stockLevel)          lines.push(`Stock: ${product.stockLevel}`);
+          if (product.categories?.length)  lines.push(`Categories: ${product.categories.join(', ')}`);
+          if (product.nutrition) {
+            lines.push('\nNutrition Facts:');
+            for (const [key, val] of Object.entries(product.nutrition)) {
+              lines.push(`  ${key}: ${val}`);
+            }
+          }
+          if (product.imageUrl) lines.push(`\nImage: ${product.imageUrl}`);
+
+          return { content: [{ type: 'text', text: lines.join('\n') }] };
         }
 
         case 'find_stores': {

@@ -13,12 +13,14 @@ const mockSearchProducts    = jest.fn();
 const mockSearchLocations   = jest.fn();
 const mockAddToCart         = jest.fn();
 const mockNearestLocationId = jest.fn();
+const mockGetProductDetails = jest.fn();
 
 jest.unstable_mockModule('../../src/api.js', async () => ({
   searchProducts:    mockSearchProducts,
   searchLocations:   mockSearchLocations,
   addToCart:         mockAddToCart,
   nearestLocationId: mockNearestLocationId,
+  getProductDetails: mockGetProductDetails,
 }));
 
 const { createServer } = await import('../../src/server.js');
@@ -39,6 +41,7 @@ beforeEach(() => {
   mockSearchLocations.mockReset();
   mockAddToCart.mockReset();
   mockNearestLocationId.mockReset();
+  mockGetProductDetails.mockReset();
 });
 
 describe('search_products', () => {
@@ -55,7 +58,7 @@ describe('search_products', () => {
     expect(text).toContain('Whole Milk');
     expect(text).toContain('Kroger');
     expect(text).toContain('0001111050953');
-    expect(mockSearchProducts).toHaveBeenCalledWith('mock-client-token', 'milk', null, 10);
+    expect(mockSearchProducts).toHaveBeenCalledWith('mock-client-token', 'milk', null, 10, undefined, undefined);
   });
 
   test('returns no-results message when list is empty', async () => {
@@ -77,7 +80,29 @@ describe('search_products', () => {
     await client.callTool({ name: 'search_products', arguments: { query: 'milk', zip_code: '85281' } });
 
     expect(mockNearestLocationId).toHaveBeenCalledWith('mock-client-token', '85281');
-    expect(mockSearchProducts).toHaveBeenCalledWith('mock-client-token', 'milk', 'loc-123', 10);
+    expect(mockSearchProducts).toHaveBeenCalledWith('mock-client-token', 'milk', 'loc-123', 10, undefined, undefined);
+  });
+
+  test('passes brand filter when provided', async () => {
+    mockSearchProducts.mockResolvedValue([
+      { brand: 'Kroger', description: 'Milk', upc: '111', price: '$3.00' },
+    ]);
+
+    const client = await makeClient();
+    await client.callTool({ name: 'search_products', arguments: { query: 'milk', brand: 'Kroger' } });
+
+    expect(mockSearchProducts).toHaveBeenCalledWith('mock-client-token', 'milk', null, 10, 'Kroger', undefined);
+  });
+
+  test('passes fulfillment filter when provided', async () => {
+    mockSearchProducts.mockResolvedValue([
+      { brand: '', description: 'Milk', upc: '111', price: '$3.00' },
+    ]);
+
+    const client = await makeClient();
+    await client.callTool({ name: 'search_products', arguments: { query: 'milk', fulfillment: 'PICKUP' } });
+
+    expect(mockSearchProducts).toHaveBeenCalledWith('mock-client-token', 'milk', null, 10, undefined, 'PICKUP');
   });
 });
 
@@ -153,5 +178,59 @@ describe('add_to_cart', () => {
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('authorize');
+  });
+});
+
+describe('get_product_details', () => {
+  const baseProduct = {
+    upc: '0001111050953',
+    brand: 'Kroger',
+    description: 'Whole Milk',
+    price: '$3.49 (sale: N/A)',
+    imageUrl: 'https://example.com/img.png',
+    categories: ['Dairy'],
+    size: '1 gal',
+    stockLevel: 'HIGH',
+    nutrition: null,
+  };
+
+  test('returns formatted product details', async () => {
+    mockGetProductDetails.mockResolvedValue(baseProduct);
+
+    const client = await makeClient();
+    const result = await client.callTool({ name: 'get_product_details', arguments: { upc: '0001111050953' } });
+
+    const text = result.content[0].text;
+    expect(text).toContain('Whole Milk');
+    expect(text).toContain('0001111050953');
+    expect(text).toContain('$3.49');
+    expect(text).toContain('1 gal');
+    expect(mockGetProductDetails).toHaveBeenCalledWith('mock-client-token', '0001111050953', null);
+  });
+
+  test('includes nutrition facts when present', async () => {
+    mockGetProductDetails.mockResolvedValue({
+      ...baseProduct,
+      nutrition: { calories: 150, totalFat: '8g', protein: '8g' },
+    });
+
+    const client = await makeClient();
+    const result = await client.callTool({ name: 'get_product_details', arguments: { upc: '0001111050953' } });
+
+    const text = result.content[0].text;
+    expect(text).toContain('Nutrition Facts');
+    expect(text).toContain('calories');
+    expect(text).toContain('150');
+  });
+
+  test('resolves locationId from zip_code', async () => {
+    mockNearestLocationId.mockResolvedValue('loc-456');
+    mockGetProductDetails.mockResolvedValue(baseProduct);
+
+    const client = await makeClient();
+    await client.callTool({ name: 'get_product_details', arguments: { upc: '0001111050953', zip_code: '85281' } });
+
+    expect(mockNearestLocationId).toHaveBeenCalledWith('mock-client-token', '85281');
+    expect(mockGetProductDetails).toHaveBeenCalledWith('mock-client-token', '0001111050953', 'loc-456');
   });
 });

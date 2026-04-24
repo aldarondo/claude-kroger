@@ -41,14 +41,16 @@ async function put(path, body, token) {
  * @param {number} [limit=10] - number of results (max 50)
  * @returns {Promise<Array<{upc, brand, description, price, imageUrl}>>}
  */
-export async function searchProducts(token, query, locationId, limit = 10) {
+export async function searchProducts(token, query, locationId, limit = 10, brand = null, fulfillment = null) {
   if (!query) throw new Error('query is required');
 
   const params = {
     'filter.term':  query,
     'filter.limit': Math.min(limit, 50),
   };
-  if (locationId) params['filter.locationId'] = locationId;
+  if (locationId)  params['filter.locationId']  = locationId;
+  if (brand)       params['filter.brand']        = brand;
+  if (fulfillment) params['filter.fulfillment']  = fulfillment;
 
   const response = await get('/products', params, token);
   const items = response?.data || [];
@@ -72,6 +74,46 @@ export async function searchProducts(token, query, locationId, limit = 10) {
       imageUrl:    thumb?.url || '',
     };
   });
+}
+
+// ── Single product details ────────────────────────────────────────────────────
+
+/**
+ * Fetch full details for a single product by UPC.
+ * @param {string} token - client token from getClientToken()
+ * @param {string} upc - 13-digit UPC code
+ * @param {string} [locationId] - optional store location for local pricing
+ * @returns {Promise<{upc, brand, description, price, imageUrl, categories, size, stockLevel, nutrition}>}
+ */
+export async function getProductDetails(token, upc, locationId = null) {
+  if (!upc) throw new Error('upc is required');
+
+  const params = {};
+  if (locationId) params['filter.locationId'] = locationId;
+
+  const response = await get(`/products/${upc}`, params, token);
+  const item = response?.data || response;
+
+  const images = item.images || [];
+  const front  = images.find((img) => img.perspective === 'front') || images[0];
+  const thumb  = front?.sizes?.find((s) => s.size === 'thumbnail') || front?.sizes?.[0];
+
+  const priceInfo = item.items?.[0]?.price;
+  const price     = priceInfo
+    ? `$${priceInfo.regular?.toFixed(2) || '?'} (sale: $${priceInfo.promo?.toFixed(2) || 'N/A'})`
+    : 'Price unavailable';
+
+  return {
+    upc:         item.upc,
+    brand:       item.brand || '',
+    description: item.description || '',
+    price,
+    imageUrl:    thumb?.url || '',
+    categories:  item.categories || [],
+    size:        item.items?.[0]?.size || '',
+    stockLevel:  item.items?.[0]?.stockLevel || '',
+    nutrition:   item.items?.[0]?.nutrition || null,
+  };
 }
 
 // ── Store / location search ───────────────────────────────────────────────────
