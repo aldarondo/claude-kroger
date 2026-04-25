@@ -18,7 +18,6 @@
 - [2026-04-19] Deployed to Synology NAS (port 8771); container running — blocked on Kroger credentials in `.env`
 
 ## 🚫 Blocked
-- ❌ [docker-monitor:deploy-failed] GitHub Actions deploy failed (run #24920105840) — https://github.com/aldarondo/claude-kroger/actions/runs/24920105840 — 2026-04-25 08:01 UTC
 
 - ❌ [docker-monitor:no-ghcr-image] Container `claude-kroger` uses `node:20-alpine` — migrate to `ghcr.io/aldarondo/...` with a GitHub Actions build-push workflow — 2026-04-23 08:00 UTC
 
