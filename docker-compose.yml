@@ -10,6 +10,9 @@ services:
       - KROGER_USER_REFRESH_TOKEN=${KROGER_USER_REFRESH_TOKEN:-}
       - KROGER_USER_TOKEN_EXPIRES_AT=${KROGER_USER_TOKEN_EXPIRES_AT:-0}
       - PORT=${PORT:-8771}
+    volumes:
+      - ./logs:/app/logs
+    command: sh -c "node src/serve.js 2>&1 | tee -a /app/logs/app.log"
     network_mode: host
     logging:
       driver: "json-file"
